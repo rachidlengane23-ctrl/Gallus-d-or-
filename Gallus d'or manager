@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gallus d'Or Manager – Système IA d'Élevage</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b6623">
+<style>
+  body { font-family: Arial, sans-serif; margin:0; background:#f5f5f5; }
+  header { background:#1c4428; padding:20px; color:#fff; text-align:center; }
+  nav { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; background:#fff; padding:10px; }
+  nav a { padding:10px 15px; background:#e0e0e0; border-radius:8px; text-decoration:none; }
+  section { padding:20px; }
+  .card { background:#fff; padding:20px; margin-bottom:15px; border-radius:12px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+  .btn { padding:10px 15px; background:#d4af37; color:#fff; border:none; border-radius:8px; cursor:pointer; }
+  .alert { background:#ffd3d3; padding:10px; border-left:5px solid red; margin-top:10px; }
+  input, select, textarea { padding:5px; margin:5px 0; width:100%; border-radius:5px; border:1px solid #ccc; }
+  canvas { max-width:100%; height:auto; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js')
+      .then(() => console.log('Service Worker registered'))
+      .catch(err => console.log('SW error:', err));
+  });
+}
+</script>
+</head>
+<body>
+<header>
+  <h1>Gallus d'Or Manager</h1>
+  <p>Analyse IA et gestion complète de votre élevage</p>
+</header>
+
+<nav>
+  <a href="#dashboard">Dashboard</a>
+  <a href="#lots">Lots</a>
+  <a href="#journal">Journal</a>
+  <a href="#prophylaxie">Prophylaxie</a>
+  <a href="#ventes">Ventes</a>
+  <a href="#ia">Analyse IA</a>
+</nav>
+
+<section id="dashboard">
+  <div class="card">
+    <h2>Dashboard</h2>
+    <canvas id="weightChart"></canvas>
+    <canvas id="mortalityChart"></canvas>
+    <canvas id="feedChart"></canvas>
+  </div>
+</section>
+
+<section id="lots">
+  <div class="card">
+    <h2>Gestion des lots</h2>
+    <label>Nom du lot :</label><input id="lotName">
+    <label>Souche :</label>
+    <select id="strain">
+      <option>Sasso</option>
+      <option>Cobb</option>
+      <option>Ross</option>
+    </select>
+    <button class="btn" onclick="saveLot()">Enregistrer</button>
+    <div id="lotResult"></div>
+    <div id="lotList"></div>
+  </div>
+</section>
+
+<section id="journal">
+  <div class="card">
+    <h2>Journal Quotidien</h2>
+    <label>Poids moyen (g) :</label><input id="weight" type="number">
+    <label>Mortalité :</label><input id="mortality" type="number">
+    <label>Aliment consommé (kg) :</label><input id="feed" type="number">
+    <label>Température (°C) :</label><input id="temp" type="number">
+    <button class="btn" onclick="saveJournal()">Enregistrer</button>
+    <button class="btn" onclick="analyzeLocal()">Analyser IA locale</button>
+    <div id="journalResult"></div>
+  </div>
+</section>
+
+<section id="prophylaxie">
+  <div class="card">
+    <h2>Prophylaxie & Vaccinations</h2>
+    <textarea id="prophylaxieNotes" placeholder="Entrez les mesures préventives..."></textarea>
+    <button class="btn" onclick="saveProphylaxie()">Enregistrer</button>
+    <div id="prophylaxieResult"></div>
+  </div>
+</section>
+
+<section id="ventes">
+  <div class="card">
+    <h2>Ventes</h2>
+    <textarea id="salesNotes" placeholder="Saisir les ventes et recettes..."></textarea>
+    <button class="btn" onclick="saveSales()">Enregistrer</button>
+    <div id="salesResult"></div>
+  </div>
+</section>
+
+<section id="ia">
+  <div class="card">
+    <h2>Analyse IA Avancée</h2>
+    <button class="btn" onclick="callAI()">Analyser via IA</button>
+    <div id="aiResult"></div>
+  </div>
+</section>
+
+<script>
+let lots = JSON.parse(localStorage.getItem('lots')||'[]');
+let journal = JSON.parse(localStorage.getItem('journal')||'[]');
+
+function saveLot(){
+  const name = document.getElementById('lotName').value;
+  const strain = document.getElementById('strain').value;
+  if(name){ 
+    lots.push({name, strain});
+    localStorage.setItem('lots', JSON.stringify(lots));
+    document.getElementById('lotResult').innerHTML = "Lot enregistré ✔️";
+    renderLots();
+  }
+}
+
+function renderLots(){
+  const container = document.getElementById('lotList');
+  container.innerHTML = lots.map(l=>`<div>${l.name} (${l.strain})</div>`).join('');
+}
+renderLots();
+
+function saveJournal(){
+  const w = parseFloat(document.getElementById('weight').value);
+  const m = parseInt(document.getElementById('mortality').value);
+  const f = parseFloat(document.getElementById('feed').value);
+  const t = parseFloat(document.getElementById('temp').value);
+  journal.push({w,m,f,t,date:new Date().toLocaleDateString()});
+  localStorage.setItem('journal', JSON.stringify(journal));
+  document.getElementById('journalResult').innerHTML = "Journal enregistré ✔️";
+  renderCharts();
+}
+
+function analyzeLocal(){
+  if(journal.length==0){alert("Saisir d'abord les données journal."); return;}
+  const latest = journal[journal.length-1];
+  let alerts = [];
+  if(latest.w<300) alerts.push("Poids bas !");
+  if(latest.m>2) alerts.push("Mortalité élevée !");
+  if(latest.f<0.2) alerts.push("Consommation aliment faible !");
+  if(latest.t<18||latest.t>32) alerts.push("Température hors norme !");
+  document.getElementById('journalResult').innerHTML = alerts.length?alerts.map(a=>`<div class='alert'>⚠️ ${a}</div>`).join(''):"✅ Tout est OK";
+}
+
+function saveProphylaxie(){
+  const notes = document.getElementById('prophylaxieNotes').value;
+  localStorage.setItem('prophylaxie', notes);
+  document.getElementById('prophylaxieResult').innerHTML="✅ Prophylaxie enregistrée";
+}
+
+function saveSales(){
+  const notes = document.getElementById('salesNotes').value;
+  localStorage.setItem('sales', notes);
+  document.getElementById('salesResult').innerHTML="✅ Ventes enregistrées";
+}
+
+async function callAI(){
+  document.getElementById('aiResult').innerHTML="Analyse en cours...";
+  try{
+    const res = await fetch("https://ton-api-ia.com/detect_anomaly",{
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(journal[journal.length-1]||{})
+    });
+    const data = await res.json();
+    document.getElementById('aiResult').innerHTML = data.anomaly?"⚠️ Anomalie IA détectée":"✅ Aucune anomalie IA";
+  }catch(e){
+    document.getElementById('aiResult').innerHTML="Erreur API IA";
+  }
+}
+
+// Charts
+function renderCharts(){
+  const labels = journal.map(j=>j.date);
+  const weights = journal.map(j=>j.w);
+  const mortalities = journal.map(j=>j.m);
+  const feeds = journal.map(j=>j.f);
+
+  new Chart(document.getElementById('weightChart'),{
+    type:'line', data:{labels, datasets:[{label:'Poids (g)',data:weights,borderColor:'#1c4428',fill:false}]}
+  });
+  new Chart(document.getElementById('mortalityChart'),{
+    type:'line', data:{labels, datasets:[{label:'Mortalité',data:mortalities,borderColor:'red',fill:false}]}
+  });
+  new Chart(document.getElementById('feedChart'),{
+    type:'line', data:{labels, datasets:[{label:'Aliment (kg)',data:feeds,borderColor:'#d4af37',fill:false}]}
+  });
+}
+
+renderCharts();
+</script>
+</body>
+</html>
